@@ -109,7 +109,7 @@ function Inventory() {
 
   const handleRefClick = (log: any) => {
     if (log.ref_type === 'sale' && log.ref_id) {
-      navigate(`/sales`);
+      navigate(`/sales/${log.ref_id}`);
     } else if (log.ref_type === 'purchase' && log.ref_id) {
       navigate(`/purchase`);
     } else if (log.ref_type === 'stocktake' && log.ref_id) {

@@ -17,6 +17,7 @@ import Products from './pages/Products';
 import Inventory from './pages/Inventory';
 import Purchase from './pages/Purchase';
 import Sales from './pages/Sales';
+import SaleDetail from './pages/SaleDetail';
 import Members from './pages/Members';
 import Reports from './pages/Reports';
 import Stocktake from './pages/Stocktake';
@@ -89,6 +90,7 @@ function App() {
             <Route path="/inventory" element={<Inventory />} />
             <Route path="/purchase" element={<Purchase />} />
             <Route path="/sales" element={<Sales />} />
+            <Route path="/sales/:id" element={<SaleDetail />} />
             <Route path="/members" element={<Members />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/stocktake" element={<Stocktake />} />
