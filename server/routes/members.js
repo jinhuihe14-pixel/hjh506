@@ -5,7 +5,7 @@ import { success, fail } from '../utils.js';
 const router = Router();
 
 router.get('/', (req, res) => {
-  const { page = 1, pageSize = 20, keyword = '', fishing_type, member_level } = req.query;
+  const { page = 1, pageSize = 20, keyword = '', fishing_type, member_level, sort_by = 'total_spent', sort_order = 'desc' } = req.query;
   const offset = (page - 1) * pageSize;
   
   let where = [];
@@ -30,10 +30,14 @@ router.get('/', (req, res) => {
   
   const total = db.prepare(`SELECT COUNT(*) as cnt FROM members ${whereSql}`).get(...params).cnt;
   
+  const validSortFields = ['id', 'name', 'total_spent', 'total_orders', 'created_at'];
+  const sortField = validSortFields.includes(sort_by) ? sort_by : 'total_spent';
+  const sortOrder = sort_order === 'asc' ? 'ASC' : 'DESC';
+  
   const list = db.prepare(`
     SELECT * FROM members
     ${whereSql}
-    ORDER BY id DESC
+    ORDER BY ${sortField} ${sortOrder}, id DESC
     LIMIT ? OFFSET ?
   `).all(...params, Number(pageSize), offset);
   
@@ -54,7 +58,32 @@ router.get('/:id', (req, res) => {
     LIMIT 10
   `).all(req.params.id);
   
-  member.recent_orders = recentOrders;
+  const orderIds = recentOrders.map(o => o.id);
+  
+  let orderItemsMap = {};
+  if (orderIds.length > 0) {
+    const placeholders = orderIds.map(() => '?').join(',');
+    const items = db.prepare(`
+      SELECT si.*, so.created_at as order_date
+      FROM sales_items si
+      LEFT JOIN sales_orders so ON si.order_id = so.id
+      WHERE si.order_id IN (${placeholders})
+      ORDER BY so.id DESC, si.id ASC
+    `).all(...orderIds);
+    
+    for (const item of items) {
+      if (!orderItemsMap[item.order_id]) {
+        orderItemsMap[item.order_id] = [];
+      }
+      orderItemsMap[item.order_id].push(item);
+    }
+  }
+  
+  member.recent_orders = recentOrders.map(order => ({
+    ...order,
+    items: orderItemsMap[order.id] || []
+  }));
+  
   res.json(success(member));
 });
 
@@ -63,6 +92,16 @@ router.post('/', (req, res) => {
   
   if (!name) {
     return res.json(fail('会员姓名不能为空'));
+  }
+  
+  if (phone) {
+    if (!/^\d{11}$/.test(phone)) {
+      return res.json(fail('手机号格式不正确，请输入11位数字'));
+    }
+    const existing = db.prepare('SELECT id FROM members WHERE phone = ?').get(phone);
+    if (existing) {
+      return res.json(fail('该手机号已注册'));
+    }
   }
   
   try {
@@ -82,6 +121,16 @@ router.put('/:id', (req, res) => {
   const { id } = req.params;
   const { name, phone, member_level, fishing_type } = req.body;
   
+  if (phone) {
+    if (!/^\d{11}$/.test(phone)) {
+      return res.json(fail('手机号格式不正确，请输入11位数字'));
+    }
+    const existing = db.prepare('SELECT id FROM members WHERE phone = ? AND id != ?').get(phone, id);
+    if (existing) {
+      return res.json(fail('该手机号已注册'));
+    }
+  }
+  
   try {
     db.prepare(`
       UPDATE members SET name = ?, phone = ?, member_level = ?, fishing_type = ?, updated_at = CURRENT_TIMESTAMP
@@ -96,6 +145,12 @@ router.put('/:id', (req, res) => {
 });
 
 router.delete('/:id', (req, res) => {
+  const orderCount = db.prepare('SELECT COUNT(*) as cnt FROM sales_orders WHERE member_id = ?').get(req.params.id).cnt;
+  
+  if (orderCount > 0) {
+    return res.json(fail(`该会员存在 ${orderCount} 笔关联销售记录，无法删除`));
+  }
+  
   db.prepare('DELETE FROM members WHERE id = ?').run(req.params.id);
   res.json(success(null, '删除成功'));
 });
