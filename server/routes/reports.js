@@ -109,6 +109,45 @@ router.get('/monthly/summary', (req, res) => {
   const grossProfit = salesStats.sales_amount - salesStats.cost_amount;
   const grossMargin = salesStats.sales_amount > 0 ? (grossProfit / salesStats.sales_amount * 100) : 0;
   
+  const stocktakeStats = db.prepare(`
+    SELECT 
+      COALESCE(SUM(ABS(si.diff_quantity)), 0) as total_diff_qty,
+      COALESCE(SUM(si.system_quantity), 0) as total_system_qty,
+      COUNT(DISTINCT st.id) as stocktake_count
+    FROM stocktakes st
+    LEFT JOIN stocktake_items si ON st.id = si.stocktake_id
+    WHERE st.status = 'completed' 
+      AND st.completed_at >= ? 
+      AND st.completed_at <= ?
+  `).get(startDate, endDate);
+  
+  const inventoryAccuracy = stocktakeStats.total_system_qty > 0
+    ? Math.round((1 - stocktakeStats.total_diff_qty / stocktakeStats.total_system_qty) * 10000) / 100
+    : null;
+  
+  const lastMonth = dayjs(targetMonth).subtract(1, 'month').format('YYYY-MM');
+  const lastMonthStart = `${lastMonth}-01 00:00:00`;
+  const lastMonthEnd = dayjs(lastMonth).endOf('month').format('YYYY-MM-DD 23:59:59');
+  
+  const lastMonthStocktake = db.prepare(`
+    SELECT 
+      COALESCE(SUM(ABS(si.diff_quantity)), 0) as total_diff_qty,
+      COALESCE(SUM(si.system_quantity), 0) as total_system_qty
+    FROM stocktakes st
+    LEFT JOIN stocktake_items si ON st.id = si.stocktake_id
+    WHERE st.status = 'completed' 
+      AND st.completed_at >= ? 
+      AND st.completed_at <= ?
+  `).get(lastMonthStart, lastMonthEnd);
+  
+  const lastMonthAccuracy = lastMonthStocktake.total_system_qty > 0
+    ? Math.round((1 - lastMonthStocktake.total_diff_qty / lastMonthStocktake.total_system_qty) * 10000) / 100
+    : null;
+  
+  const accuracyChange = (inventoryAccuracy !== null && lastMonthAccuracy !== null)
+    ? Math.round((inventoryAccuracy - lastMonthAccuracy) * 100) / 100
+    : null;
+  
   res.json(success({
     month: targetMonth,
     sales: {
@@ -129,6 +168,14 @@ router.get('/monthly/summary', (req, res) => {
     members: {
       total: memberCount,
       new_count: newMemberCount
+    },
+    inventory_accuracy: {
+      accuracy_rate: inventoryAccuracy,
+      last_month_rate: lastMonthAccuracy,
+      change: accuracyChange,
+      stocktake_count: stocktakeStats.stocktake_count,
+      total_diff_qty: stocktakeStats.total_diff_qty,
+      total_system_qty: stocktakeStats.total_system_qty
     }
   }));
 });

@@ -4,6 +4,74 @@ import { success, fail, generateOrderNo } from '../utils.js';
 
 const router = Router();
 
+router.get('/latest', (req, res) => {
+  const stocktake = db.prepare(`
+    SELECT * FROM stocktakes 
+    WHERE status = 'completed' 
+    ORDER BY completed_at DESC 
+    LIMIT 1
+  `).get();
+  
+  if (!stocktake) {
+    return res.json(success(null));
+  }
+  
+  const items = db.prepare(`
+    SELECT * FROM stocktake_items WHERE stocktake_id = ?
+  `).all(stocktake.id);
+  
+  let overage_qty = 0;
+  let shortage_qty = 0;
+  let overage_amount = 0;
+  let shortage_amount = 0;
+  
+  items.forEach(item => {
+    if (item.diff_quantity > 0) {
+      overage_qty += item.diff_quantity;
+      overage_amount += item.diff_amount;
+    } else if (item.diff_quantity < 0) {
+      shortage_qty += Math.abs(item.diff_quantity);
+      shortage_amount += Math.abs(item.diff_amount);
+    }
+  });
+  
+  stocktake.overage_quantity = overage_qty;
+  stocktake.shortage_quantity = shortage_qty;
+  stocktake.overage_amount = Math.round(overage_amount * 100) / 100;
+  stocktake.shortage_amount = Math.round(shortage_amount * 100) / 100;
+  stocktake.item_count = items.length;
+  
+  res.json(success(stocktake));
+});
+
+router.get('/category-preview/:categoryId', (req, res) => {
+  const { categoryId } = req.params;
+  
+  let whereSql = 'p.status = 1';
+  let params = [];
+  
+  if (categoryId !== 'all') {
+    whereSql += ' AND p.category_id = ?';
+    params.push(categoryId);
+  }
+  
+  const stats = db.prepare(`
+    SELECT 
+      COUNT(*) as product_count,
+      COALESCE(SUM(i.quantity), 0) as total_stock,
+      COALESCE(SUM(i.quantity * i.avg_cost), 0) as total_value
+    FROM products p
+    LEFT JOIN inventory i ON p.id = i.product_id
+    WHERE ${whereSql}
+  `).get(...params);
+  
+  res.json(success({
+    product_count: stats.product_count,
+    total_stock: stats.total_stock,
+    total_value: Math.round(stats.total_value * 100) / 100
+  }));
+});
+
 router.get('/', (req, res) => {
   const { page = 1, pageSize = 20, status } = req.query;
   const offset = (page - 1) * pageSize;

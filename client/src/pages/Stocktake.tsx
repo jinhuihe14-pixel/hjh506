@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Table, Button, Modal, Form, Input, Select, message, Space, Tag, InputNumber, Popconfirm, Card, Statistic, Row, Col } from 'antd';
+import { Table, Button, Modal, Form, Input, Select, message, Space, Tag, InputNumber, Popconfirm, Card, Statistic, Row, Col, Radio } from 'antd';
 import { PlusOutlined, EyeOutlined, CheckOutlined, DownloadOutlined } from '@ant-design/icons';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { stocktakeApi, categoryApi, exportApi } from '../api/types';
 
 function Stocktake() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [list, setList] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -16,11 +19,22 @@ function Stocktake() {
   const [categories, setCategories] = useState<any[]>([]);
   const [form] = Form.useForm();
   const [editing, setEditing] = useState(false);
+  const [stocktakeType, setStocktakeType] = useState<'all' | 'category'>('all');
+  const [categoryPreview, setCategoryPreview] = useState<any>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   useEffect(() => {
     loadCategories();
     loadData();
   }, [page, pageSize, status]);
+
+  useEffect(() => {
+    const state = location.state as any;
+    if (state?.stocktakeId) {
+      handleView(state.stocktakeId);
+      navigate('.', { replace: true, state: {} });
+    }
+  }, [location.state]);
 
   const loadCategories = async () => {
     const data = await categoryApi.list();
@@ -38,8 +52,40 @@ function Stocktake() {
     }
   };
 
+  const loadCategoryPreview = async (categoryId: number | 'all') => {
+    setPreviewLoading(true);
+    try {
+      const data = await stocktakeApi.categoryPreview(categoryId);
+      setCategoryPreview(data);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleTypeChange = (e: any) => {
+    const type = e.target.value;
+    setStocktakeType(type);
+    if (type === 'all') {
+      form.setFieldsValue({ category_id: undefined });
+      loadCategoryPreview('all');
+    } else {
+      setCategoryPreview(null);
+    }
+  };
+
+  const handleCategoryChange = (value: number) => {
+    if (value) {
+      loadCategoryPreview(value);
+    } else {
+      setCategoryPreview(null);
+    }
+  };
+
   const handleCreate = () => {
     form.resetFields();
+    setStocktakeType('all');
+    setCategoryPreview(null);
+    loadCategoryPreview('all');
     setCreateVisible(true);
   };
 
@@ -223,18 +269,58 @@ function Stocktake() {
         open={createVisible}
         onOk={handleCreateSubmit}
         onCancel={() => setCreateVisible(false)}
-        width={500}
+        width={560}
       >
         <Form form={form} layout="vertical">
-          <Form.Item name="category_id" label="盘点分类">
-            <Select 
-              placeholder="留空则盘点全部商品"
-              allowClear
-              options={categories.map(c => ({ label: c.name, value: c.id }))}
-            />
+          <Form.Item label="盘点范围">
+            <Radio.Group value={stocktakeType} onChange={handleTypeChange} style={{ width: '100%' }}>
+              <Radio value="all">全部商品盘点</Radio>
+              <Radio value="category">按品类盘点</Radio>
+            </Radio.Group>
           </Form.Item>
+          {stocktakeType === 'category' && (
+            <Form.Item name="category_id" label="选择品类" rules={[{ required: true, message: '请选择盘点品类' }]}>
+              <Select 
+                placeholder="请选择要盘点的品类"
+                allowClear
+                options={categories.map(c => ({ label: c.name, value: c.id }))}
+                onChange={handleCategoryChange}
+              />
+            </Form.Item>
+          )}
+          {categoryPreview && (
+            <Card size="small" style={{ marginBottom: 16, background: '#f6ffed', borderColor: '#b7eb8f' }}>
+              <Row gutter={16}>
+                <Col span={8}>
+                  <Statistic 
+                    title="商品总数" 
+                    value={categoryPreview.product_count} 
+                    suffix="种"
+                    valueStyle={{ color: '#52c41a', fontSize: 18 }}
+                  />
+                </Col>
+                <Col span={8}>
+                  <Statistic 
+                    title="库存总数量" 
+                    value={categoryPreview.total_stock} 
+                    suffix="件"
+                    valueStyle={{ color: '#1677ff', fontSize: 18 }}
+                  />
+                </Col>
+                <Col span={8}>
+                  <Statistic 
+                    title="库存总金额" 
+                    value={categoryPreview.total_value} 
+                    precision={2}
+                    suffix="元"
+                    valueStyle={{ color: '#fa8c16', fontSize: 18 }}
+                  />
+                </Col>
+              </Row>
+            </Card>
+          )}
           <Form.Item name="remark" label="备注">
-            <Input.TextArea rows={2} />
+            <Input.TextArea rows={2} placeholder="选填" />
           </Form.Item>
         </Form>
       </Modal>

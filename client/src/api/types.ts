@@ -98,7 +98,9 @@ export const stocktakeApi = {
   create: (data: any) => api.post('/stocktake', data),
   updateItem: (stocktakeId: number, itemId: number, actual_quantity: number) =>
     api.post(`/stocktake/${stocktakeId}/items/${itemId}`, { actual_quantity }),
-  complete: (id: number) => api.post(`/stocktake/${id}/complete`)
+  complete: (id: number) => api.post(`/stocktake/${id}/complete`),
+  latest: () => api.get('/stocktake/latest'),
+  categoryPreview: (categoryId: number | 'all') => api.get(`/stocktake/category-preview/${categoryId}`)
 };
 
 export const exportApi = {

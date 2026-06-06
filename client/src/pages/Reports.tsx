@@ -376,56 +376,116 @@ function Reports() {
           </div>
 
           {summary && (
-            <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
-              <Col span={6}>
-                <Card size="small">
-                  <Statistic 
-                    title="销售总额" 
-                    value={summary.sales?.sales_amount || 0} 
-                    precision={2}
-                    suffix="元"
-                    valueStyle={{ color: '#1677ff' }}
-                  />
-                </Card>
-              </Col>
-              <Col span={6}>
-                <Card size="small">
-                  <Statistic 
-                    title="毛利" 
-                    value={summary.sales?.gross_profit || 0} 
-                    precision={2}
-                    suffix="元"
-                    valueStyle={{ color: '#52c41a' }}
-                  />
-                  <div style={{ color: '#666', marginTop: 4 }}>
-                    毛利率: {summary.sales?.gross_margin || 0}%
-                  </div>
-                </Card>
-              </Col>
-              <Col span={6}>
-                <Card size="small">
-                  <Statistic 
-                    title="订单数" 
-                    value={summary.sales?.order_count || 0} 
-                    suffix="单"
-                  />
-                  <div style={{ color: '#666', marginTop: 4 }}>
-                    零售 {summary.sales?.retail_orders || 0} / 批发 {summary.sales?.wholesale_orders || 0}
-                  </div>
-                </Card>
-              </Col>
-              <Col span={6}>
-                <Card size="small">
-                  <Statistic 
-                    title="采购金额" 
-                    value={summary.purchase?.purchase_amount || 0} 
-                    precision={2}
-                    suffix="元"
-                    valueStyle={{ color: '#fa8c16' }}
-                  />
-                </Card>
-              </Col>
-            </Row>
+            <>
+              <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+                <Col span={6}>
+                  <Card size="small">
+                    <Statistic 
+                      title="销售总额" 
+                      value={summary.sales?.sales_amount || 0} 
+                      precision={2}
+                      suffix="元"
+                      valueStyle={{ color: '#1677ff' }}
+                    />
+                  </Card>
+                </Col>
+                <Col span={6}>
+                  <Card size="small">
+                    <Statistic 
+                      title="毛利" 
+                      value={summary.sales?.gross_profit || 0} 
+                      precision={2}
+                      suffix="元"
+                      valueStyle={{ color: '#52c41a' }}
+                    />
+                    <div style={{ color: '#666', marginTop: 4 }}>
+                      毛利率: {summary.sales?.gross_margin || 0}%
+                    </div>
+                  </Card>
+                </Col>
+                <Col span={6}>
+                  <Card size="small">
+                    <Statistic 
+                      title="订单数" 
+                      value={summary.sales?.order_count || 0} 
+                      suffix="单"
+                    />
+                    <div style={{ color: '#666', marginTop: 4 }}>
+                      零售 {summary.sales?.retail_orders || 0} / 批发 {summary.sales?.wholesale_orders || 0}
+                    </div>
+                  </Card>
+                </Col>
+                <Col span={6}>
+                  <Card size="small">
+                    <Statistic 
+                      title="采购金额" 
+                      value={summary.purchase?.purchase_amount || 0} 
+                      precision={2}
+                      suffix="元"
+                      valueStyle={{ color: '#fa8c16' }}
+                    />
+                  </Card>
+                </Col>
+              </Row>
+
+              <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
+                <Col span={24}>
+                  <Card size="small">
+                    <Row gutter={16} align="middle">
+                      <Col span={6}>
+                        <Statistic 
+                          title="库存准确率" 
+                          value={summary.inventory_accuracy?.accuracy_rate ?? '-'} 
+                          suffix={summary.inventory_accuracy?.accuracy_rate !== null ? '%' : ''}
+                          precision={2}
+                          valueStyle={{ color: '#722ed1', fontSize: 26 }}
+                        />
+                        <div style={{ color: '#666', marginTop: 4 }}>
+                          计算公式：（1 - 盘点差异数量 / 系统库存总数量）× 100%
+                        </div>
+                      </Col>
+                      <Col span={6}>
+                        <div style={{ color: '#666', marginBottom: 6 }}>环比上月</div>
+                        {summary.inventory_accuracy?.change !== null && summary.inventory_accuracy?.change !== undefined ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Tag 
+                              color={summary.inventory_accuracy.change >= 0 ? 'green' : 'red'}
+                              style={{ fontSize: 14, padding: '2px 8px' }}
+                            >
+                              {summary.inventory_accuracy.change >= 0 ? '↑' : '↓'} 
+                              {Math.abs(summary.inventory_accuracy.change).toFixed(2)}%
+                            </Tag>
+                            <span style={{ color: '#999' }}>
+                              上月 {summary.inventory_accuracy.last_month_rate?.toFixed(2) ?? '-'}%
+                            </span>
+                          </div>
+                        ) : (
+                          <span style={{ color: '#999' }}>上月无盘点数据</span>
+                        )}
+                      </Col>
+                      <Col span={6}>
+                        <div style={{ color: '#666', marginBottom: 6 }}>本月盘点</div>
+                        <div style={{ fontSize: 16, fontWeight: 'bold' }}>
+                          {summary.inventory_accuracy?.stocktake_count || 0} 次
+                        </div>
+                        <div style={{ color: '#999', fontSize: 12, marginTop: 2 }}>
+                          差异数量 {summary.inventory_accuracy?.total_diff_qty || 0} 件
+                        </div>
+                      </Col>
+                      <Col span={6}>
+                        <div style={{ color: '#666', marginBottom: 6 }}>盘点库存总量</div>
+                        <div style={{ fontSize: 16, fontWeight: 'bold' }}>
+                          {summary.inventory_accuracy?.total_system_qty || 0} 件
+                        </div>
+                        <div style={{ color: '#999', fontSize: 12, marginTop: 2 }}>
+                          系统库存总数
+                        </div>
+                      </Col>
+                    </Row>
+                  </Card>
+                </Col>
+              </Row>
+            </>
           )}
 
           {yoyData && (
