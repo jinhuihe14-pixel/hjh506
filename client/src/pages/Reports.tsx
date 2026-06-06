@@ -1,9 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Tabs, Card, Row, Col, Statistic, DatePicker, Select, Table, Button, Tag, Empty } from 'antd';
-import { DownloadOutlined, WarningOutlined, ClockCircleOutlined, ShoppingOutlined } from '@ant-design/icons';
+import { 
+  Tabs, Card, Row, Col, Statistic, DatePicker, Select, Table, Button, Tag, 
+  Empty, List, Avatar, Collapse, Tooltip 
+} from 'antd';
+import { 
+  DownloadOutlined, WarningOutlined, ClockCircleOutlined, ShoppingOutlined,
+  UserOutlined, CrownOutlined, RiseOutlined
+} from '@ant-design/icons';
 import ReactECharts from 'echarts-for-react';
 import dayjs from 'dayjs';
-import { reportsApi, exportApi } from '../api/types';
+import { reportsApi, memberApi, exportApi } from '../api/types';
 
 const { MonthPicker } = DatePicker;
 
@@ -17,6 +23,10 @@ function Reports() {
   const [categoryPreference, setCategoryPreference] = useState<any[]>([]);
   const [salesTrend, setSalesTrend] = useState<any[]>([]);
   const [yoyData, setYoyData] = useState<any>(null);
+  
+  const [memberPortraitList, setMemberPortraitList] = useState<any[]>([]);
+  const [expandedMemberId, setExpandedMemberId] = useState<number | null>(null);
+  const [memberDetailStats, setMemberDetailStats] = useState<any>(null);
 
   const [replenishmentList, setReplenishmentList] = useState<any[]>([]);
   const [expiryList, setExpiryList] = useState<any[]>([]);
@@ -44,7 +54,7 @@ function Reports() {
   };
 
   const loadMonthlyReports = async () => {
-    const [sum, prod, cat, mem, ft, cp, trend, yoy] = await Promise.all([
+    const [sum, prod, cat, mem, ft, cp, trend, yoy, portrait] = await Promise.all([
       reportsApi.monthlySummary(month),
       reportsApi.monthlyProducts(month),
       reportsApi.monthlyCategories(month),
@@ -52,7 +62,8 @@ function Reports() {
       reportsApi.fishingTypes(month),
       reportsApi.categoryPreference(month),
       reportsApi.salesTrend(6),
-      reportsApi.yoy(month)
+      reportsApi.yoy(month),
+      reportsApi.monthlyMemberPortrait(month, 10)
     ]);
     setSummary(sum);
     setProductStats(prod);
@@ -62,6 +73,22 @@ function Reports() {
     setCategoryPreference(cp);
     setSalesTrend(trend);
     setYoyData(yoy);
+    setMemberPortraitList(portrait);
+    setExpandedMemberId(null);
+    setMemberDetailStats(null);
+  };
+
+  const handleMemberExpand = async (memberId: number) => {
+    if (expandedMemberId === memberId) {
+      setExpandedMemberId(null);
+      setMemberDetailStats(null);
+      return;
+    }
+    setExpandedMemberId(memberId);
+    try {
+      const data = await memberApi.consumptionStats(memberId, 3);
+      setMemberDetailStats(data);
+    } catch (e) {}
   };
 
   const productColumns = [
@@ -488,6 +515,150 @@ function Reports() {
               pagination={false}
               scroll={{ x: 900 }}
             />
+          </Card>
+
+          <Card 
+            title={
+              <span>
+                <CrownOutlined style={{ color: '#faad14', marginRight: 8 }} />
+                会员消费画像
+              </span>
+            } 
+            size="small" 
+            style={{ marginBottom: 16 }}
+          >
+            {memberPortraitList.length === 0 ? (
+              <Empty description="暂无会员消费数据" />
+            ) : (
+              <List
+                size="small"
+                dataSource={memberPortraitList}
+                renderItem={(member, index) => (
+                  <List.Item
+                    style={{ 
+                      padding: '12px 16px',
+                      background: expandedMemberId === member.id ? '#f0f5ff' : 'transparent',
+                      borderRadius: 8,
+                      marginBottom: index < memberPortraitList.length - 1 ? 8 : 0,
+                      cursor: 'pointer'
+                    }}
+                    onClick={() => handleMemberExpand(member.id)}
+                  >
+                    <List.Item.Meta
+                      avatar={
+                        <Avatar 
+                          style={{ 
+                            background: index < 3 
+                              ? ['#faad14', '#d9d9d9', '#d48806'][index] 
+                              : '#722ed1' 
+                          }}
+                        >
+                          {index < 3 ? index + 1 : member.name?.charAt(0)}
+                        </Avatar>
+                      }
+                      title={
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontWeight: 500 }}>{member.name}</span>
+                          <Tag color="blue" style={{ margin: 0 }}>{member.member_level}</Tag>
+                        </div>
+                      }
+                      description={
+                        <div style={{ marginTop: 4 }}>
+                          <div style={{ marginBottom: 4 }}>
+                            {member.preferred_categories?.slice(0, 3).map((cat: string, i: number) => (
+                              <Tag key={i} color="purple" style={{ marginRight: 4, marginBottom: 4 }}>
+                                {cat}
+                              </Tag>
+                            ))}
+                          </div>
+                          <div style={{ fontSize: 12, color: '#999', display: 'flex', gap: 16 }}>
+                            <span>
+                              <RiseOutlined style={{ color: '#52c41a' }} /> 
+                              客单价 ¥{member.avg_order_amount?.toFixed(2)}
+                            </span>
+                            <span>
+                              <ClockCircleOutlined style={{ color: '#1677ff' }} /> 
+                              每{member.visit_frequency}天来店一次
+                            </span>
+                          </div>
+                        </div>
+                      }
+                    />
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 12, color: '#999' }}>本月消费</div>
+                      <div style={{ fontSize: 18, fontWeight: 'bold', color: '#ff4d4f' }}>
+                        ¥{member.total_amount?.toFixed(2)}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#999' }}>
+                        {member.order_count} 单
+                      </div>
+                    </div>
+                  </List.Item>
+                )}
+              />
+            )}
+            
+            {expandedMemberId && memberDetailStats && (
+              <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f0f0f0' }}>
+                <Row gutter={[16, 16]}>
+                  <Col span={12}>
+                    <Card size="small" title="近3个月消费趋势">
+                      <ReactECharts 
+                        option={{
+                          tooltip: { trigger: 'axis' },
+                          xAxis: { 
+                            type: 'category', 
+                            data: memberDetailStats.trend?.map((t: any) => t.month) || [] 
+                          },
+                          yAxis: [
+                            { type: 'value', name: '金额(元)' },
+                            { type: 'value', name: '订单数' }
+                          ],
+                          series: [
+                            {
+                              name: '消费金额',
+                              type: 'line',
+                              data: memberDetailStats.trend?.map((t: any) => t.total_amount) || [],
+                              smooth: true,
+                              itemStyle: { color: '#1677ff' },
+                              areaStyle: { opacity: 0.2 }
+                            },
+                            {
+                              name: '订单数',
+                              type: 'line',
+                              yAxisIndex: 1,
+                              data: memberDetailStats.trend?.map((t: any) => t.order_count) || [],
+                              smooth: true,
+                              itemStyle: { color: '#52c41a' }
+                            }
+                          ]
+                        }} 
+                        style={{ height: 240 }} 
+                      />
+                    </Card>
+                  </Col>
+                  <Col span={12}>
+                    <Card size="small" title="购买品类占比">
+                      <ReactECharts 
+                        option={{
+                          tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
+                          legend: { orient: 'vertical', right: 10, top: 'center' },
+                          series: [{
+                            type: 'pie',
+                            radius: ['40%', '70%'],
+                            data: memberDetailStats.category_stats?.map((c: any) => ({
+                              name: c.category_name || '其他',
+                              value: c.total_amount
+                            })) || []
+                          }]
+                        }} 
+                        style={{ height: 240 }} 
+                      />
+                    </Card>
+                  </Col>
+                </Row>
+              </div>
+            )}
           </Card>
 
           <Card title="会员消费排行" size="small">

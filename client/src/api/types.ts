@@ -67,7 +67,9 @@ export const memberApi = {
   create: (data: any) => api.post('/members', data),
   update: (id: number, data: any) => api.put(`/members/${id}`, data),
   remove: (id: number) => api.delete(`/members/${id}`),
-  search: (keyword: string) => api.get<any[]>('/members/search/select', { params: { keyword } })
+  search: (keyword: string) => api.get<any[]>('/members/search/select', { params: { keyword } }),
+  recommendProducts: (id: number) => api.get(`/members/${id}/recommend-products`),
+  consumptionStats: (id: number, months?: number) => api.get(`/members/${id}/consumption-stats`, { params: { months } })
 };
 
 export const reportsApi = {
@@ -78,6 +80,7 @@ export const reportsApi = {
   monthlyProducts: (month?: string) => api.get<any[]>('/reports/monthly/products', { params: { month } }),
   monthlyCategories: (month?: string) => api.get<any[]>('/reports/monthly/categories', { params: { month } }),
   monthlyMembers: (month?: string) => api.get<any[]>('/reports/monthly/members', { params: { month } }),
+  monthlyMemberPortrait: (month?: string, limit?: number) => api.get<any[]>('/reports/monthly/member-portrait', { params: { month, limit } }),
   fishingTypes: (month?: string) => api.get<any[]>('/reports/monthly/fishing-types', { params: { month } }),
   categoryPreference: (month?: string, fishingType?: string) => 
     api.get<any[]>('/reports/monthly/category-preference', { params: { month, fishing_type: fishingType } }),

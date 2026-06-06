@@ -8,7 +8,8 @@ import {
   UserOutlined,
   BarChartOutlined,
   FileTextOutlined,
-  AppstoreOutlined
+  AppstoreOutlined,
+  PayCircleOutlined
 } from '@ant-design/icons';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
@@ -19,11 +20,13 @@ import Sales from './pages/Sales';
 import Members from './pages/Members';
 import Reports from './pages/Reports';
 import Stocktake from './pages/Stocktake';
+import Pos from './pages/Pos';
 
 const { Header, Sider, Content } = Layout;
 
 const menuItems = [
   { key: '/', icon: <DashboardOutlined />, label: '数据概览' },
+  { key: '/pos', icon: <PayCircleOutlined />, label: '快速收银' },
   { key: '/products', icon: <ShoppingOutlined />, label: '商品档案' },
   { key: '/inventory', icon: <InboxOutlined />, label: '库存管理' },
   { key: '/purchase', icon: <AppstoreOutlined />, label: '采购入库' },
@@ -81,6 +84,7 @@ function App() {
         <Content style={{ margin: '24px', background: '#fff', padding: 24, borderRadius: 8, minHeight: 280 }}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/pos" element={<Pos />} />
             <Route path="/products" element={<Products />} />
             <Route path="/inventory" element={<Inventory />} />
             <Route path="/purchase" element={<Purchase />} />

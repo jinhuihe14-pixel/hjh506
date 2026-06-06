@@ -169,4 +169,155 @@ router.get('/search/select', (req, res) => {
   res.json(success(list));
 });
 
+router.get('/:id/recommend-products', (req, res) => {
+  const memberId = req.params.id;
+  
+  const topCategories = db.prepare(`
+    SELECT 
+      c.id as category_id,
+      c.name as category_name,
+      COUNT(DISTINCT si.id) as item_count,
+      COALESCE(SUM(si.quantity), 0) as total_quantity,
+      COALESCE(SUM(si.subtotal), 0) as total_amount
+    FROM sales_items si
+    LEFT JOIN sales_orders so ON si.order_id = so.id
+    LEFT JOIN products p ON si.product_id = p.id
+    LEFT JOIN categories c ON p.category_id = c.id
+    WHERE so.member_id = ?
+    GROUP BY c.id
+    ORDER BY total_quantity DESC
+    LIMIT 3
+  `).all(memberId);
+  
+  let recommendProducts = [];
+  
+  if (topCategories.length > 0) {
+    const categoryIds = topCategories.map(c => c.category_id).filter(id => id);
+    const placeholders = categoryIds.map(() => '?').join(',');
+    
+    const purchasedProductIds = db.prepare(`
+      SELECT DISTINCT si.product_id
+      FROM sales_items si
+      LEFT JOIN sales_orders so ON si.order_id = so.id
+      WHERE so.member_id = ?
+    `).all(memberId).map(r => r.product_id);
+    
+    const excludePlaceholders = purchasedProductIds.length > 0 
+      ? 'AND p.id NOT IN (' + purchasedProductIds.map(() => '?').join(',') + ')' 
+      : '';
+    
+    const params = [...categoryIds];
+    if (purchasedProductIds.length > 0) {
+      params.push(...purchasedProductIds);
+    }
+    params.push(memberId);
+    
+    recommendProducts = db.prepare(`
+      SELECT 
+        p.id, p.sku, p.name, p.unit, p.retail_price, p.wholesale_price,
+        c.name as category_name,
+        i.quantity as stock_quantity,
+        (
+          SELECT COALESCE(SUM(si.quantity), 0)
+          FROM sales_items si
+          LEFT JOIN sales_orders so ON si.order_id = so.id
+          WHERE si.product_id = p.id AND so.member_id = ?
+        ) as member_purchase_count
+      FROM products p
+      LEFT JOIN categories c ON p.category_id = c.id
+      LEFT JOIN inventory i ON p.id = i.product_id
+      WHERE p.category_id IN (${placeholders}) 
+        AND p.status = 1
+        ${excludePlaceholders}
+      ORDER BY member_purchase_count DESC, i.quantity DESC
+      LIMIT 10
+    `).all(...params);
+  }
+  
+  res.json(success({
+    top_categories: topCategories,
+    products: recommendProducts
+  }));
+});
+
+router.get('/:id/consumption-stats', (req, res) => {
+  const memberId = req.params.id;
+  const { months = 3 } = req.query;
+  
+  const monthList = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const monthDate = dayjs().subtract(i, 'month');
+    monthList.push(monthDate.format('YYYY-MM'));
+  }
+  
+  const trendData = monthList.map(month => {
+    const startDate = `${month}-01 00:00:00`;
+    const endDate = dayjs(month).endOf('month').format('YYYY-MM-DD 23:59:59');
+    
+    const stats = db.prepare(`
+      SELECT 
+        COUNT(DISTINCT so.id) as order_count,
+        COALESCE(SUM(si.subtotal), 0) as total_amount,
+        COALESCE(SUM(si.quantity), 0) as total_quantity
+      FROM sales_orders so
+      LEFT JOIN sales_items si ON so.id = si.order_id
+      WHERE so.member_id = ? AND so.created_at >= ? AND so.created_at <= ?
+    `).get(memberId, startDate, endDate);
+    
+    return {
+      month,
+      order_count: stats.order_count,
+      total_amount: Math.round(stats.total_amount * 100) / 100,
+      total_quantity: stats.total_quantity
+    };
+  });
+  
+  const categoryStats = db.prepare(`
+    SELECT 
+      c.id as category_id,
+      c.name as category_name,
+      COUNT(DISTINCT si.id) as item_count,
+      COALESCE(SUM(si.quantity), 0) as total_quantity,
+      COALESCE(SUM(si.subtotal), 0) as total_amount
+    FROM sales_items si
+    LEFT JOIN sales_orders so ON si.order_id = so.id
+    LEFT JOIN products p ON si.product_id = p.id
+    LEFT JOIN categories c ON p.category_id = c.id
+    WHERE so.member_id = ?
+    GROUP BY c.id
+    ORDER BY total_amount DESC
+  `).all(memberId);
+  
+  categoryStats.forEach(item => {
+    item.total_amount = Math.round(item.total_amount * 100) / 100;
+  });
+  
+  const currentMonth = dayjs().format('YYYY-MM');
+  const currentMonthStart = `${currentMonth}-01 00:00:00`;
+  const currentMonthEnd = dayjs().endOf('month').format('YYYY-MM-DD 23:59:59');
+  
+  const monthStats = db.prepare(`
+    SELECT 
+      COUNT(DISTINCT so.id) as order_count,
+      COALESCE(SUM(si.subtotal), 0) as total_amount
+    FROM sales_orders so
+    LEFT JOIN sales_items si ON so.id = si.order_id
+    WHERE so.member_id = ? AND so.created_at >= ? AND so.created_at <= ?
+  `).get(memberId, currentMonthStart, currentMonthEnd);
+  
+  const avgOrderAmount = monthStats.order_count > 0 
+    ? Math.round(monthStats.total_amount / monthStats.order_count * 100) / 100 
+    : 0;
+  
+  res.json(success({
+    trend: trendData,
+    category_stats: categoryStats,
+    current_month: {
+      order_count: monthStats.order_count,
+      total_amount: Math.round(monthStats.total_amount * 100) / 100,
+      avg_order_amount: avgOrderAmount
+    }
+  }));
+});
+
 export default router;

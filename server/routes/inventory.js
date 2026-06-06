@@ -61,33 +61,42 @@ router.get('/logs', (req, res) => {
   let params = [];
   
   if (product_id) {
-    where.push('product_id = ?');
+    where.push('il.product_id = ?');
     params.push(product_id);
   }
   
   if (change_type) {
-    where.push('change_type = ?');
+    where.push('il.change_type = ?');
     params.push(change_type);
   }
   
   if (start_date) {
-    where.push('created_at >= ?');
+    where.push('il.created_at >= ?');
     params.push(start_date);
   }
   
   if (end_date) {
-    where.push('created_at <= ?');
+    where.push('il.created_at <= ?');
     params.push(end_date + ' 23:59:59');
   }
   
   const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
   
-  const total = db.prepare(`SELECT COUNT(*) as cnt FROM inventory_logs ${whereSql}`).get(...params).cnt;
+  const total = db.prepare(`SELECT COUNT(*) as cnt FROM inventory_logs il ${whereSql}`).get(...params).cnt;
   
   const list = db.prepare(`
-    SELECT il.*, p.sku, p.name, p.unit
+    SELECT il.*, p.sku, p.name, p.unit,
+      CASE 
+        WHEN il.ref_type = 'sale' THEN so.order_no
+        WHEN il.ref_type = 'purchase' THEN po.order_no
+        WHEN il.ref_type = 'stocktake' THEN st.stocktake_no
+        ELSE NULL
+      END as ref_no
     FROM inventory_logs il
     LEFT JOIN products p ON il.product_id = p.id
+    LEFT JOIN sales_orders so ON il.ref_type = 'sale' AND il.ref_id = so.id
+    LEFT JOIN purchase_orders po ON il.ref_type = 'purchase' AND il.ref_id = po.id
+    LEFT JOIN stocktakes st ON il.ref_type = 'stocktake' AND il.ref_id = st.id
     ${whereSql}
     ORDER BY il.id DESC
     LIMIT ? OFFSET ?

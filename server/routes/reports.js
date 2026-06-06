@@ -260,6 +260,68 @@ router.get('/monthly/members', (req, res) => {
   res.json(success(list));
 });
 
+router.get('/monthly/member-portrait', (req, res) => {
+  const { month, limit = 10 } = req.query;
+  const targetMonth = month || dayjs().format('YYYY-MM');
+  const startDate = `${targetMonth}-01 00:00:00`;
+  const endDate = dayjs(targetMonth).endOf('month').format('YYYY-MM-DD 23:59:59');
+  const daysInMonth = dayjs(targetMonth).daysInMonth();
+  
+  const topMembers = db.prepare(`
+    SELECT 
+      m.id, m.name, m.phone, m.member_level, m.fishing_type,
+      COUNT(DISTINCT so.id) as order_count,
+      COALESCE(SUM(si.subtotal), 0) as total_amount,
+      COALESCE(SUM(si.quantity), 0) as total_quantity
+    FROM members m
+    LEFT JOIN sales_orders so ON m.id = so.member_id
+      AND so.created_at >= ? AND so.created_at <= ?
+    LEFT JOIN sales_items si ON so.id = si.order_id
+    WHERE so.id IS NOT NULL
+    GROUP BY m.id
+    ORDER BY total_amount DESC
+    LIMIT ?
+  `).all(startDate, endDate, Number(limit));
+  
+  const result = topMembers.map(member => {
+    const categories = db.prepare(`
+      SELECT 
+        c.id as category_id,
+        c.name as category_name,
+        COALESCE(SUM(si.quantity), 0) as total_quantity,
+        COALESCE(SUM(si.subtotal), 0) as total_amount
+      FROM sales_items si
+      LEFT JOIN sales_orders so ON si.order_id = so.id
+      LEFT JOIN products p ON si.product_id = p.id
+      LEFT JOIN categories c ON p.category_id = c.id
+      WHERE so.member_id = ? AND so.created_at >= ? AND so.created_at <= ?
+      GROUP BY c.id
+      ORDER BY total_amount DESC
+      LIMIT 3
+    `).all(member.id, startDate, endDate);
+    
+    const categoryTags = categories.map(c => c.category_name).filter(Boolean);
+    
+    const avgOrderAmount = member.order_count > 0 
+      ? Math.round(member.total_amount / member.order_count * 100) / 100 
+      : 0;
+    
+    const visitFrequency = member.order_count > 0 
+      ? Math.round((daysInMonth / member.order_count) * 10) / 10 
+      : 0;
+    
+    return {
+      ...member,
+      total_amount: Math.round(member.total_amount * 100) / 100,
+      avg_order_amount: avgOrderAmount,
+      visit_frequency: visitFrequency,
+      preferred_categories: categoryTags
+    };
+  });
+  
+  res.json(success(result));
+});
+
 router.get('/monthly/fishing-types', (req, res) => {
   const { month } = req.query;
   const targetMonth = month || dayjs().format('YYYY-MM');
